@@ -93,9 +93,10 @@
     padding:16px 18px; margin-bottom:22px; display:grid; grid-template-columns:1fr 1fr; gap:10px;
   }
   form .full{grid-column:1/-1;}
+  form > div{min-width:0;}
   label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); display:block; margin-bottom:4px;}
   input[type=date], input[type=number], input[type=text]{
-    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+    width:100%; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
     background:var(--chalk); color:var(--ink); font-family:'Inter',sans-serif; font-size:14px;
   }
   .type-chips{display:flex; gap:8px;}
@@ -167,6 +168,42 @@
   .ex-line{font-size:13px; color:var(--ink-soft); padding:2px 0 2px 78px;}
   .ex-line b{color:var(--ink); font-weight:600;}
   .empty{color:var(--ink-soft); font-size:13px; padding:20px 0; text-align:center;}
+
+  .edit{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; line-height:1; padding:2px 4px;}
+  .edit:hover{color:var(--court-soft);}
+  .row-actions{display:flex; align-items:center; gap:2px; margin-left:auto;}
+
+  .pace-banner{
+    display:flex; justify-content:space-between; align-items:center; font-size:12px;
+    padding:8px 10px; border-radius:8px; margin-top:8px; font-family:'JetBrains Mono',monospace;
+  }
+  .pace-banner.ontrack{background:var(--rope-soft); color:var(--rope);}
+  .pace-banner.behind{background:var(--brass-soft); color:var(--brass);}
+
+  .edit-banner{
+    display:flex; justify-content:space-between; align-items:center; background:var(--brass-soft);
+    color:var(--brass); border-radius:8px; padding:8px 12px; font-size:13px; margin-bottom:10px;
+    grid-column:1/-1;
+  }
+  .edit-banner button{background:none; border:1px solid var(--brass); color:var(--brass); border-radius:6px; padding:3px 9px; font-size:12px; cursor:pointer;}
+
+  .settings-card{
+    background:var(--chalk-card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; margin-bottom:22px;
+  }
+  .settings-row{
+    display:flex; justify-content:space-between; align-items:center; padding:8px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .settings-row:last-child{border-bottom:none;}
+  .settings-row .s-label{font-size:13px; color:var(--ink);}
+  .settings-row .s-sub{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+  .btn-secondary{
+    background:none; border:1px solid var(--line); color:var(--ink); border-radius:8px;
+    padding:7px 12px; font-size:12px; cursor:pointer; white-space:nowrap;
+  }
+  .btn-secondary.on{background:var(--court); color:var(--chalk); border-color:var(--court);}
+  #importFile{display:none;}
 </style>
 </head>
 <body>
@@ -186,6 +223,7 @@
     </div>
     <div class="breakdown" id="breakdown"></div>
     <div class="streak" id="streakBadge" style="display:none;"></div>
+    <div class="pace-banner" id="paceBanner" style="display:none;"></div>
   </div>
 
   <div class="strength-card">
@@ -196,6 +234,10 @@
   </div>
 
   <form id="logForm">
+    <div class="edit-banner full" id="editBanner" style="display:none;">
+      <span>Editing an existing session</span>
+      <button type="button" id="cancelEditBtn">Cancel</button>
+    </div>
     <div class="full">
       <label>Workout type</label>
       <div class="type-chips" id="typeChips">
@@ -223,8 +265,33 @@
       <label for="fNote">Note (optional)</label>
       <input type="text" id="fNote" placeholder="e.g. incline 8%, or felt strong today">
     </div>
-    <button type="submit" class="add">Log session</button>
+    <button type="submit" class="add" id="submitBtn">Log session</button>
   </form>
+
+  <div class="settings-card">
+    <div class="settings-row">
+      <div>
+        <div class="s-label">Weekly goal reminders</div>
+        <div class="s-sub">Checks your pace when you open the app</div>
+      </div>
+      <button type="button" class="btn-secondary" id="remindersBtn">Enable</button>
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="s-label">Backup your data</div>
+        <div class="s-sub">Save a file you can restore from</div>
+      </div>
+      <button type="button" class="btn-secondary" id="exportBtn">Export</button>
+    </div>
+    <div class="settings-row">
+      <div>
+        <div class="s-label">Restore from backup</div>
+        <div class="s-sub">Replaces current data with the file's</div>
+      </div>
+      <button type="button" class="btn-secondary" id="importBtn">Import</button>
+      <input type="file" id="importFile" accept="application/json">
+    </div>
+  </div>
 
   <div class="section-label">
     <span>History</span>
@@ -242,10 +309,14 @@
 const GOAL_KEY = 'rope-settings';
 const SESS_KEY = 'rope-sessions';
 const CARDIO_TYPES = ['rope','treadmill'];
+const REMIND_KEY = 'rope-reminders';
 let sessions = [];
 let goalMinutes = 150;
 let selectedType = 'rope';
 let activeFilter = 'all';
+let editingId = null;
+let remindersEnabled = false;
+let lastNotified = null;
 
 function pad(n){return n.toString().padStart(2,'0');}
 function todayStr(){
@@ -285,7 +356,20 @@ async function load(){
     const raw = localStorage.getItem(GOAL_KEY);
     goalMinutes = raw ? JSON.parse(raw).goalMinutes : 150;
   }catch(e){ goalMinutes = 150; }
+  try{
+    const raw = localStorage.getItem(REMIND_KEY);
+    const r = raw ? JSON.parse(raw) : {enabled:false, lastNotified:null};
+    remindersEnabled = !!r.enabled;
+    lastNotified = r.lastNotified || null;
+  }catch(e){ remindersEnabled = false; lastNotified = null; }
   render();
+  updateRemindersBtn();
+  checkPaceAndNotify();
+}
+
+async function saveReminders(){
+  try{ localStorage.setItem(REMIND_KEY, JSON.stringify({enabled: remindersEnabled, lastNotified})); }
+  catch(e){ console.error('save reminders failed', e); }
 }
 
 async function save(){
@@ -319,6 +403,17 @@ function currentBreakdown(){
   const rope = list.filter(s=>s.type==='rope').reduce((a,s)=>a+(s.minutes||0),0);
   const tread = list.filter(s=>s.type==='treadmill').reduce((a,s)=>a+(s.minutes||0),0);
   return {rope, tread};
+}
+
+function paceStatus(){
+  const total = currentCardioTotal();
+  const now = new Date();
+  const dayIdx = now.getDay() === 0 ? 7 : now.getDay(); // Mon=1..Sun=7
+  const expected = goalMinutes * (dayIdx/7);
+  const diff = Math.round(expected - total);
+  if(total >= goalMinutes) return {status:'done', diff:0};
+  if(diff > 5) return {status:'behind', diff};
+  return {status:'ontrack', diff:0};
 }
 
 function weeklyStreak(){
@@ -392,7 +487,40 @@ function render(){
   const st = currentStrength();
   document.getElementById('strengthVal').innerHTML = `${st.count}<span>session${st.count===1?'':'s'} &middot; ${st.sets} set${st.sets===1?'':'s'}</span>`;
 
+  const pace = paceStatus();
+  const paceEl = document.getElementById('paceBanner');
+  if(pace.status === 'behind'){
+    paceEl.style.display = 'flex';
+    paceEl.className = 'pace-banner behind';
+    paceEl.innerHTML = `<span>Behind pace for this point in the week</span><span>${pace.diff} min</span>`;
+  } else if(pace.status === 'ontrack'){
+    paceEl.style.display = 'flex';
+    paceEl.className = 'pace-banner ontrack';
+    paceEl.innerHTML = `<span>On pace</span><span>&#10003;</span>`;
+  } else {
+    paceEl.style.display = 'none';
+  }
+
   renderHistory();
+}
+
+function todayKey(){ return todayStr(); }
+
+async function checkPaceAndNotify(){
+  if(!remindersEnabled) return;
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  if(lastNotified === todayKey()) return;
+  const pace = paceStatus();
+  if(pace.status !== 'behind') return;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification('Cardio check-in', {
+      body: `You're about ${pace.diff} min behind pace for this week's ${goalMinutes} min goal.`,
+      icon: 'icon-192.png'
+    });
+    lastNotified = todayKey();
+    await saveReminders();
+  }catch(e){ /* service worker not ready yet, skip silently */ }
 }
 
 function formatExerciseLine(ex){
@@ -440,7 +568,10 @@ function renderHistory(){
             <span class="sess-date">${fmtShort(parseDate(s.date))}</span>
             <span class="type-tag strength">Strength</span>
             <span class="sess-note">${s.note ? s.note.replace(/</g,'&lt;') : ''}</span>
-            <button class="del" data-id="${s.id}" aria-label="Delete session">&times;</button>
+            <span class="row-actions">
+              <button class="edit" data-id="${s.id}" aria-label="Edit session">&#9998;</button>
+              <button class="del" data-id="${s.id}" aria-label="Delete session">&times;</button>
+            </span>
           </div>
           ${exLines}
         </div>`;
@@ -451,7 +582,10 @@ function renderHistory(){
         <span class="type-tag ${s.type}">${typeLabel(s.type)}</span>
         <span class="sess-note">${s.note ? s.note.replace(/</g,'&lt;') : ''}</span>
         <span class="sess-min">${s.minutes}m</span>
-        <button class="del" data-id="${s.id}" aria-label="Delete session">&times;</button>
+        <span class="row-actions">
+          <button class="edit" data-id="${s.id}" aria-label="Edit session">&#9998;</button>
+          <button class="del" data-id="${s.id}" aria-label="Delete session">&times;</button>
+        </span>
       </div>
     `;
     }).join('');
@@ -469,11 +603,70 @@ function renderHistory(){
   container.querySelectorAll('.del').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const id = btn.getAttribute('data-id');
+      if(editingId === id) cancelEdit();
       sessions = sessions.filter(s=>s.id !== id);
       await save();
       render();
     });
   });
+
+  container.querySelectorAll('.edit').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.getAttribute('data-id');
+      const s = sessions.find(x=>x.id === id);
+      if(s) startEdit(s);
+    });
+  });
+}
+
+function startEdit(s){
+  editingId = s.id;
+  document.getElementById('fDate').value = s.date;
+  document.getElementById('fNote').value = s.note || '';
+
+  const chip = document.querySelector(`.type-chip[data-type="${s.type}"]`);
+  if(chip){
+    selectedType = s.type;
+    document.querySelectorAll('.type-chip').forEach(c=>c.classList.toggle('active', c===chip));
+    const isStrength = s.type === 'strength';
+    document.getElementById('cardioFields').style.display = isStrength ? 'none' : 'block';
+    document.getElementById('strengthFields').style.display = isStrength ? 'block' : 'none';
+  }
+
+  if(s.type === 'strength'){
+    const list = document.getElementById('exerciseList');
+    list.innerHTML = '';
+    (s.exercises || []).forEach(ex=>{
+      const block = makeExerciseBlock();
+      block.querySelector('.ex-name').value = ex.name;
+      const setsList = block.querySelector('.sets-list');
+      setsList.innerHTML = '';
+      ex.sets.forEach((set,i)=>{
+        const row = makeSetRow(i+1);
+        row.querySelector('.set-reps').value = set.reps;
+        row.querySelector('.set-weight').value = set.weight;
+        setsList.appendChild(row);
+      });
+      list.appendChild(block);
+    });
+    if(list.children.length === 0) list.appendChild(makeExerciseBlock());
+  } else {
+    document.getElementById('fMin').value = s.minutes;
+  }
+
+  document.getElementById('editBanner').style.display = 'flex';
+  document.getElementById('submitBtn').textContent = 'Update session';
+  document.getElementById('logForm').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function cancelEdit(){
+  editingId = null;
+  document.getElementById('editBanner').style.display = 'none';
+  document.getElementById('submitBtn').textContent = 'Log session';
+  document.getElementById('logForm').reset();
+  document.getElementById('fDate').value = todayStr();
+  document.getElementById('exerciseList').innerHTML = '';
+  document.getElementById('exerciseList').appendChild(makeExerciseBlock());
 }
 
 document.getElementById('fDate').value = todayStr();
@@ -551,6 +744,9 @@ document.getElementById('logForm').addEventListener('submit', async (e)=>{
   const note = document.getElementById('fNote').value.trim();
   if(!date) return;
 
+  const id = editingId || (Date.now().toString(36)+Math.random().toString(36).slice(2,6));
+  let newSession = null;
+
   if(selectedType === 'strength'){
     const exercises = [];
     document.querySelectorAll('.exercise-block').forEach(block=>{
@@ -567,19 +763,28 @@ document.getElementById('logForm').addEventListener('submit', async (e)=>{
       if(sets.length > 0) exercises.push({name, sets});
     });
     if(exercises.length === 0) return;
-    sessions.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), date, note, type: 'strength', exercises });
-    document.getElementById('exerciseList').innerHTML = '';
-    document.getElementById('exerciseList').appendChild(makeExerciseBlock());
+    newSession = { id, date, note, type: 'strength', exercises };
   } else {
     const minutes = parseInt(document.getElementById('fMin').value, 10);
     if(!minutes || minutes <= 0) return;
-    sessions.push({ id: Date.now().toString(36)+Math.random().toString(36).slice(2,6), date, minutes, note, type: selectedType });
+    newSession = { id, date, minutes, note, type: selectedType };
+  }
+
+  if(editingId){
+    sessions = sessions.map(s => s.id === editingId ? newSession : s);
+    cancelEdit();
+  } else {
+    sessions.push(newSession);
     document.getElementById('fMin').value = '';
+    document.getElementById('fNote').value = '';
+    document.getElementById('exerciseList').innerHTML = '';
+    document.getElementById('exerciseList').appendChild(makeExerciseBlock());
   }
   await save();
-  document.getElementById('fNote').value = '';
   render();
 });
+
+document.getElementById('cancelEditBtn').addEventListener('click', cancelEdit);
 
 document.getElementById('goalEditWrap').addEventListener('click', function(){
   if(this.querySelector('input')) return;
@@ -594,6 +799,80 @@ document.getElementById('goalEditWrap').addEventListener('click', function(){
     render();
   });
   inp.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter') inp.blur(); });
+});
+
+function updateRemindersBtn(){
+  const btn = document.getElementById('remindersBtn');
+  if(remindersEnabled){
+    btn.textContent = 'On';
+    btn.classList.add('on');
+  } else {
+    btn.textContent = 'Enable';
+    btn.classList.remove('on');
+  }
+}
+
+document.getElementById('remindersBtn').addEventListener('click', async ()=>{
+  if(remindersEnabled){
+    remindersEnabled = false;
+    await saveReminders();
+    updateRemindersBtn();
+    return;
+  }
+  if(!('Notification' in window)){
+    alert('Notifications are not supported in this browser.');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if(perm !== 'granted'){
+    alert('Notifications were not enabled. You can still see the in-app pace banner at the top.');
+    return;
+  }
+  remindersEnabled = true;
+  await saveReminders();
+  updateRemindersBtn();
+  checkPaceAndNotify();
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  const payload = { sessions, goalMinutes, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `training-backup-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', ()=>{
+  document.getElementById('importFile').click();
+});
+
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (evt)=>{
+    try{
+      const data = JSON.parse(evt.target.result);
+      if(!Array.isArray(data.sessions)) throw new Error('bad format');
+      const ok = confirm(`This will replace your current data with the backup (${data.sessions.length} sessions). Continue?`);
+      if(!ok) return;
+      sessions = data.sessions;
+      sessions.forEach(s=>{ if(!s.type) s.type = 'rope'; });
+      if(data.goalMinutes) goalMinutes = data.goalMinutes;
+      await save();
+      await saveGoal();
+      render();
+    }catch(err){
+      alert('Could not read that file. Make sure it\'s a backup exported from this app.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
 });
 
 load();
