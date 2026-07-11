@@ -169,6 +169,27 @@
   .ex-line b{color:var(--ink); font-weight:600;}
   .empty{color:var(--ink-soft); font-size:13px; padding:20px 0; text-align:center;}
 
+  details.year-group{margin-bottom:10px;}
+  details.year-group > summary{
+    font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:.02em; color:var(--ink);
+    cursor:pointer; padding:8px 0; list-style:none; display:flex; align-items:center; gap:8px;
+  }
+  details.year-group > summary::-webkit-details-marker{display:none;}
+  details.year-group > summary::before{
+    content:'\25B8'; display:inline-block; transition:transform .15s ease; color:var(--court-soft); font-size:16px;
+  }
+  details.year-group[open] > summary::before{transform:rotate(90deg);}
+  details.month-group{margin:4px 0 10px 4px; border-left:2px solid var(--line); padding-left:12px;}
+  details.month-group > summary{
+    font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--court-soft); cursor:pointer; padding:6px 0; list-style:none; display:flex; align-items:center; gap:6px;
+  }
+  details.month-group > summary::-webkit-details-marker{display:none;}
+  details.month-group > summary::before{
+    content:'\25B8'; display:inline-block; transition:transform .15s ease; font-size:12px;
+  }
+  details.month-group[open] > summary::before{transform:rotate(90deg);}
+
   .edit{background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:14px; line-height:1; padding:2px 4px;}
   .edit:hover{color:var(--court-soft);}
   .row-actions{display:flex; align-items:center; gap:2px; margin-left:auto;}
@@ -204,6 +225,39 @@
   }
   .btn-secondary.on{background:var(--court); color:var(--chalk); border-color:var(--court);}
   #importFile{display:none;}
+
+  .calendar-card{
+    background:var(--chalk-card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; margin-bottom:22px;
+  }
+  .cal-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .cal-title{font-family:'Bebas Neue',sans-serif; font-size:20px; color:var(--ink); letter-spacing:.02em;}
+  .cal-nav{
+    background:none; border:1px solid var(--line); border-radius:6px; color:var(--ink-soft);
+    font-size:16px; padding:2px 11px; cursor:pointer; line-height:1.6;
+  }
+  .cal-weekdays{
+    display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
+    font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--ink-soft); margin-bottom:6px;
+  }
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  .cal-day{
+    aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    border-radius:8px; cursor:pointer; font-size:12px; color:var(--ink); background:var(--chalk);
+    border:1px solid transparent;
+  }
+  .cal-day.empty{visibility:hidden; cursor:default;}
+  .cal-day.today{border-color:var(--court-soft); font-weight:600;}
+  .cal-day.selected{background:var(--court); color:var(--chalk);}
+  .cal-day .dots{display:flex; gap:2px; margin-top:3px; height:5px;}
+  .cal-dot{width:5px; height:5px; border-radius:50%;}
+  .cal-dot.cardio{background:var(--rope);}
+  .cal-dot.strength{background:var(--brass-fill);}
+  .cal-day.selected .cal-dot{background:var(--chalk);}
+  .day-sessions{margin-top:12px; border-top:1px solid var(--line); padding-top:12px; font-size:13px;}
+  .day-sessions .d-label{font-size:11px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;}
+  .day-sessions .d-row{margin-bottom:8px;}
+  .day-sessions .d-row .ex-line{padding-left:0; margin-top:2px;}
 </style>
 </head>
 <body>
@@ -231,6 +285,19 @@
       <div class="label">Strength this week</div>
       <div class="val" id="strengthVal">0<span>sessions &middot; 0 sets</span></div>
     </div>
+  </div>
+
+  <div class="calendar-card">
+    <div class="cal-header">
+      <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
+      <span class="cal-title" id="calTitle">Month</span>
+      <button type="button" class="cal-nav" id="calNext" aria-label="Next month">&#8250;</button>
+    </div>
+    <div class="cal-weekdays">
+      <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div id="calDaySessions"></div>
   </div>
 
   <form id="logForm">
@@ -317,6 +384,9 @@ let activeFilter = 'all';
 let editingId = null;
 let remindersEnabled = false;
 let lastNotified = null;
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calSelectedDate = null;
 
 function pad(n){return n.toString().padStart(2,'0');}
 function todayStr(){
@@ -502,6 +572,7 @@ function render(){
   }
 
   renderHistory();
+  renderCalendar();
 }
 
 function todayKey(){ return todayStr(); }
@@ -534,6 +605,89 @@ function formatExerciseLine(ex){
   return `<b>${ex.name}</b> \u2014 ${detail}`;
 }
 
+function daysInMonth(y,m){ return new Date(y, m+1, 0).getDate(); }
+function firstMondayOffset(y,m){
+  const wd = new Date(y,m,1).getDay(); // 0=Sun..6=Sat
+  return wd === 0 ? 6 : wd-1;
+}
+function dateKey(y,m,d){ return y+'-'+pad(m+1)+'-'+pad(d); }
+
+function sessionsByDateMap(){
+  const map = {};
+  sessions.forEach(s=>{
+    if(!map[s.date]) map[s.date] = [];
+    map[s.date].push(s);
+  });
+  return map;
+}
+
+function renderCalendar(){
+  const map = sessionsByDateMap();
+  const title = new Date(calYear, calMonth, 1).toLocaleDateString('en-US',{month:'long', year:'numeric'});
+  document.getElementById('calTitle').textContent = title;
+  const total = daysInMonth(calYear, calMonth);
+  const offset = firstMondayOffset(calYear, calMonth);
+  const todayStrVal = todayStr();
+
+  let cells = '';
+  for(let i=0;i<offset;i++) cells += `<div class="cal-day empty"></div>`;
+  for(let d=1; d<=total; d++){
+    const key = dateKey(calYear, calMonth, d);
+    const daySessions = map[key] || [];
+    const hasCardio = daySessions.some(s=>CARDIO_TYPES.includes(s.type));
+    const hasStrength = daySessions.some(s=>s.type==='strength');
+    const isToday = key === todayStrVal;
+    const isSelected = key === calSelectedDate;
+    let dots = '';
+    if(hasCardio) dots += `<span class="cal-dot cardio"></span>`;
+    if(hasStrength) dots += `<span class="cal-dot strength"></span>`;
+    cells += `<div class="cal-day${isToday?' today':''}${isSelected?' selected':''}" data-date="${key}">
+      <span>${d}</span>
+      <span class="dots">${dots}</span>
+    </div>`;
+  }
+  document.getElementById('calGrid').innerHTML = cells;
+
+  document.querySelectorAll('.cal-day:not(.empty)').forEach(cell=>{
+    cell.addEventListener('click', ()=>{
+      const key = cell.getAttribute('data-date');
+      calSelectedDate = (calSelectedDate === key) ? null : key;
+      renderCalendar();
+    });
+  });
+
+  renderDaySessions();
+}
+
+function renderDaySessions(){
+  const el = document.getElementById('calDaySessions');
+  if(!calSelectedDate){ el.innerHTML = ''; return; }
+  const map = sessionsByDateMap();
+  const list = map[calSelectedDate] || [];
+  const label = parseDate(calSelectedDate).toLocaleDateString('en-US',{weekday:'long', month:'short', day:'numeric'});
+  if(list.length === 0){
+    el.innerHTML = `<div class="day-sessions"><div class="d-label">${label}</div><div class="empty" style="padding:0;">No sessions logged.</div></div>`;
+    return;
+  }
+  const rows = list.map(s=>{
+    if(s.type === 'strength'){
+      const exLines = (s.exercises||[]).map(ex=>`<div class="ex-line">${formatExerciseLine(ex)}</div>`).join('');
+      return `<div class="d-row"><span class="type-tag strength">Strength</span>${exLines}</div>`;
+    }
+    return `<div class="d-row"><span class="type-tag ${s.type}">${typeLabel(s.type)}</span> ${s.minutes}m${s.note ? (' \u2014 '+s.note.replace(/</g,'&lt;')) : ''}</div>`;
+  }).join('');
+  el.innerHTML = `<div class="day-sessions"><div class="d-label">${label}</div>${rows}</div>`;
+}
+
+document.getElementById('calPrev').addEventListener('click', ()=>{
+  calMonth--; if(calMonth<0){ calMonth=11; calYear--; }
+  renderCalendar();
+});
+document.getElementById('calNext').addEventListener('click', ()=>{
+  calMonth++; if(calMonth>11){ calMonth=0; calYear++; }
+  renderCalendar();
+});
+
 function renderHistory(){
   const container = document.getElementById('history');
   const filtered = activeFilter === 'all' ? sessions : sessions.filter(s=>s.type===activeFilter);
@@ -548,7 +702,10 @@ function renderHistory(){
     byWeek[k].push(s);
   });
   const weeks = Object.keys(byWeek).sort().reverse();
-  container.innerHTML = weeks.map(wk=>{
+  const nowYear = new Date().getFullYear();
+  const nowMonth = new Date().getMonth();
+
+  const weekBlocks = weeks.map(wk=>{
     const list = byWeek[wk].sort((a,b)=> b.date.localeCompare(a.date));
     const cardioTotal = list.filter(s=>CARDIO_TYPES.includes(s.type)).reduce((a,s)=>a+(s.minutes||0),0);
     const monDate = parseDate(wk);
@@ -589,7 +746,7 @@ function renderHistory(){
       </div>
     `;
     }).join('');
-    return `
+    const html = `
       <div class="week-group">
         <div class="week-head">
           <span class="wk">${label}</span>
@@ -597,6 +754,39 @@ function renderHistory(){
         </div>
         ${rows}
       </div>
+    `;
+    return { year: monDate.getFullYear(), month: monDate.getMonth(), html };
+  });
+
+  // Group weeks into year -> month, preserving descending order
+  const yearOrder = [];
+  const yearMap = {};
+  weekBlocks.forEach(wb=>{
+    if(!yearMap[wb.year]){ yearMap[wb.year] = { order: [], months: {} }; yearOrder.push(wb.year); }
+    const y = yearMap[wb.year];
+    if(!y.months[wb.month]){ y.months[wb.month] = []; y.order.push(wb.month); }
+    y.months[wb.month].push(wb.html);
+  });
+
+  const monthName = (m)=> new Date(2000, m, 1).toLocaleDateString('en-US',{month:'long'});
+
+  container.innerHTML = yearOrder.map(year=>{
+    const y = yearMap[year];
+    const yearOpen = (year === nowYear) ? ' open' : '';
+    const monthsHtml = y.order.map(month=>{
+      const monthOpen = (year === nowYear && month === nowMonth) ? ' open' : '';
+      return `
+        <details class="month-group"${monthOpen}>
+          <summary>${monthName(month)}</summary>
+          ${y.months[month].join('')}
+        </details>
+      `;
+    }).join('');
+    return `
+      <details class="year-group"${yearOpen}>
+        <summary>${year}</summary>
+        ${monthsHtml}
+      </details>
     `;
   }).join('');
 
@@ -879,7 +1069,7 @@ load();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js?v=5').catch(()=>{});
+    navigator.serviceWorker.register('sw.js?v=7').catch(()=>{});
   });
 }
 </script>
