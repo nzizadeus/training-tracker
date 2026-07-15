@@ -104,9 +104,12 @@
     flex:1; text-align:center; padding:9px 4px; border:1px solid var(--line); border-radius:8px;
     font-size:13px; cursor:pointer; background:var(--chalk); color:var(--ink-soft);
   }
-  .type-chip.active[data-type="rope"]{background:var(--rope-soft); border-color:var(--rope); color:var(--rope);}
-  .type-chip.active[data-type="treadmill"]{background:var(--rope-soft); border-color:var(--rope); color:var(--rope);}
+  .type-chip.active[data-type="cardio"]{background:var(--rope-soft); border-color:var(--rope); color:var(--rope);}
   .type-chip.active[data-type="strength"]{background:var(--brass-soft); border-color:var(--brass-fill); color:var(--brass);}
+  select#cardioTypeSelect{
+    width:100%; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--chalk); color:var(--ink); font-family:'Inter',sans-serif; font-size:14px;
+  }
   button.add{
     grid-column:1/-1; background:var(--court); color:var(--chalk); border:none; border-radius:8px;
     padding:11px; font-size:14px; font-weight:600; cursor:pointer; margin-top:2px;
@@ -158,8 +161,7 @@
     font-size:10px; text-transform:uppercase; letter-spacing:.04em; padding:2px 6px; border-radius:4px;
     font-weight:600; white-space:nowrap;
   }
-  .type-tag.rope{background:var(--rope-soft); color:var(--rope);}
-  .type-tag.treadmill{background:var(--rope-soft); color:var(--rope);}
+  .type-tag.cardio{background:var(--rope-soft); color:var(--rope);}
   .type-tag.strength{background:var(--brass-soft); color:var(--brass);}
   .sess-note{color:var(--ink-soft); font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .sess-min{font-weight:600; margin-right:2px; white-space:nowrap;}
@@ -247,13 +249,28 @@
     border:1px solid transparent;
   }
   .cal-day.empty{visibility:hidden; cursor:default;}
-  .cal-day.today{border-color:var(--court-soft); font-weight:600;}
-  .cal-day.selected{background:var(--court); color:var(--chalk);}
-  .cal-day .dots{display:flex; gap:2px; margin-top:3px; height:5px;}
-  .cal-dot{width:5px; height:5px; border-radius:50%;}
+  .cal-day.today{border-color:var(--rope);}
+  .cal-day.selected{box-shadow:inset 0 0 0 2px var(--rope);}
+  .cal-day .day-num{
+    width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+    border-radius:50%; line-height:1;
+  }
+  .cal-day .day-num.worked{background:var(--court); color:var(--chalk); font-weight:600;}
+  .cal-day.selected .day-num.worked{background:var(--chalk); color:var(--court);}
+  .cal-day .dots{display:flex; gap:3px; margin-top:4px; height:7px;}
+  .cal-dot{width:7px; height:7px; border-radius:50%;}
   .cal-dot.cardio{background:var(--rope);}
   .cal-dot.strength{background:var(--brass-fill);}
-  .cal-day.selected .cal-dot{background:var(--chalk);}
+
+  .trend-card{
+    background:var(--chalk-card); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px 12px; margin-bottom:22px;
+  }
+  .trend-title{
+    font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--court-soft); margin:0 0 12px;
+  }
+  svg#trendChart{display:block; width:100%; height:120px;}
   .day-sessions{margin-top:12px; border-top:1px solid var(--line); padding-top:12px; font-size:13px;}
   .day-sessions .d-label{font-size:11px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace; margin-bottom:8px; text-transform:uppercase; letter-spacing:.05em;}
   .day-sessions .d-row{margin-bottom:8px;}
@@ -287,6 +304,11 @@
     </div>
   </div>
 
+  <div class="trend-card">
+    <p class="trend-title">Cardio minutes &middot; last 8 weeks</p>
+    <svg id="trendChart" viewBox="0 0 500 120" preserveAspectRatio="none"></svg>
+  </div>
+
   <div class="calendar-card">
     <div class="cal-header">
       <button type="button" class="cal-nav" id="calPrev" aria-label="Previous month">&#8249;</button>
@@ -308,10 +330,21 @@
     <div class="full">
       <label>Workout type</label>
       <div class="type-chips" id="typeChips">
-        <div class="type-chip active" data-type="rope">Rope skipping</div>
-        <div class="type-chip" data-type="treadmill">Treadmill incline</div>
+        <div class="type-chip active" data-type="cardio">Cardio</div>
         <div class="type-chip" data-type="strength">Strength</div>
       </div>
+    </div>
+    <div class="full" id="cardioTypeWrap">
+      <label for="cardioTypeSelect">Cardio type</label>
+      <select id="cardioTypeSelect">
+        <option value="rope">Rope skipping</option>
+        <option value="treadmill">Treadmill incline</option>
+        <option value="running">Running</option>
+        <option value="cycling">Cycling</option>
+        <option value="swimming">Swimming</option>
+        <option value="elliptical">Elliptical</option>
+        <option value="walking">Walking</option>
+      </select>
     </div>
     <div class="full">
       <label for="fDate">Date</label>
@@ -364,8 +397,7 @@
     <span>History</span>
     <div class="filter-chips" id="filterChips">
       <div class="filter-chip active" data-filter="all">All</div>
-      <div class="filter-chip" data-filter="rope">Rope</div>
-      <div class="filter-chip" data-filter="treadmill">Treadmill</div>
+      <div class="filter-chip" data-filter="cardio">Cardio</div>
       <div class="filter-chip" data-filter="strength">Strength</div>
     </div>
   </div>
@@ -375,11 +407,15 @@
 <script>
 const GOAL_KEY = 'rope-settings';
 const SESS_KEY = 'rope-sessions';
-const CARDIO_TYPES = ['rope','treadmill'];
+const CARDIO_TYPES = ['rope','treadmill','running','cycling','swimming','elliptical','walking'];
+const CARDIO_LABELS = {
+  rope: 'Rope', treadmill: 'Treadmill', running: 'Running',
+  cycling: 'Cycling', swimming: 'Swimming', elliptical: 'Elliptical', walking: 'Walking'
+};
 const REMIND_KEY = 'rope-reminders';
 let sessions = [];
 let goalMinutes = 150;
-let selectedType = 'rope';
+let selectedType = 'cardio';
 let activeFilter = 'all';
 let editingId = null;
 let remindersEnabled = false;
@@ -413,7 +449,7 @@ function fmtShort(date){
   return date.toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 function typeLabel(t){
-  return t === 'rope' ? 'Rope' : t === 'treadmill' ? 'Treadmill' : 'Strength';
+  return CARDIO_LABELS[t] || 'Strength';
 }
 
 async function load(){
@@ -470,9 +506,10 @@ function currentStrength(){
 function currentBreakdown(){
   const wk = weekKey(new Date());
   const list = weekSessions(wk).filter(s=>CARDIO_TYPES.includes(s.type));
-  const rope = list.filter(s=>s.type==='rope').reduce((a,s)=>a+(s.minutes||0),0);
-  const tread = list.filter(s=>s.type==='treadmill').reduce((a,s)=>a+(s.minutes||0),0);
-  return {rope, tread};
+  const totals = {};
+  CARDIO_TYPES.forEach(t=>{ totals[t] = 0; });
+  list.forEach(s=>{ totals[s.type] = (totals[s.type]||0) + (s.minutes||0); });
+  return totals;
 }
 
 function paceStatus(){
@@ -543,7 +580,8 @@ function render(){
   drawCoil(pct);
 
   const bd = currentBreakdown();
-  document.getElementById('breakdown').textContent = `Rope ${bd.rope}m  \u00b7  Treadmill ${bd.tread}m`;
+  const bdParts = CARDIO_TYPES.filter(t=>bd[t] > 0).map(t=>`${typeLabel(t)} ${bd[t]}m`);
+  document.getElementById('breakdown').textContent = bdParts.length ? bdParts.join('  \u00b7  ') : 'No cardio logged yet this week';
 
   const streak = weeklyStreak();
   const badge = document.getElementById('streakBadge');
@@ -573,6 +611,7 @@ function render(){
 
   renderHistory();
   renderCalendar();
+  renderTrend();
 }
 
 function todayKey(){ return todayStr(); }
@@ -638,11 +677,12 @@ function renderCalendar(){
     const hasStrength = daySessions.some(s=>s.type==='strength');
     const isToday = key === todayStrVal;
     const isSelected = key === calSelectedDate;
+    const worked = hasCardio || hasStrength;
     let dots = '';
     if(hasCardio) dots += `<span class="cal-dot cardio"></span>`;
     if(hasStrength) dots += `<span class="cal-dot strength"></span>`;
     cells += `<div class="cal-day${isToday?' today':''}${isSelected?' selected':''}" data-date="${key}">
-      <span>${d}</span>
+      <span class="day-num${worked?' worked':''}">${d}</span>
       <span class="dots">${dots}</span>
     </div>`;
   }
@@ -674,7 +714,7 @@ function renderDaySessions(){
       const exLines = (s.exercises||[]).map(ex=>`<div class="ex-line">${formatExerciseLine(ex)}</div>`).join('');
       return `<div class="d-row"><span class="type-tag strength">Strength</span>${exLines}</div>`;
     }
-    return `<div class="d-row"><span class="type-tag ${s.type}">${typeLabel(s.type)}</span> ${s.minutes}m${s.note ? (' \u2014 '+s.note.replace(/</g,'&lt;')) : ''}</div>`;
+    return `<div class="d-row"><span class="type-tag cardio">${typeLabel(s.type)}</span> ${s.minutes}m${s.note ? (' \u2014 '+s.note.replace(/</g,'&lt;')) : ''}</div>`;
   }).join('');
   el.innerHTML = `<div class="day-sessions"><div class="d-label">${label}</div>${rows}</div>`;
 }
@@ -688,9 +728,47 @@ document.getElementById('calNext').addEventListener('click', ()=>{
   renderCalendar();
 });
 
+function renderTrend(){
+  const svg = document.getElementById('trendChart');
+  const weeksToShow = 8;
+  const curMonday = mondayOf(new Date());
+  const weekTotals = [];
+  for(let i = weeksToShow - 1; i >= 0; i--){
+    const d = new Date(curMonday);
+    d.setDate(d.getDate() - i*7);
+    const k = weekKey(d);
+    const total = sessions.filter(s => CARDIO_TYPES.includes(s.type) && weekKey(parseDate(s.date)) === k)
+      .reduce((a,s)=>a+(s.minutes||0), 0);
+    weekTotals.push({ key: k, total, label: fmtShort(d) });
+  }
+
+  const w = 500, h = 120, padBottom = 16, padTop = 6;
+  const maxVal = Math.max(goalMinutes, ...weekTotals.map(w=>w.total), 1);
+  const barGap = 10;
+  const barW = (w - barGap*(weeksToShow+1)) / weeksToShow;
+  const goalY = padTop + (1 - goalMinutes/maxVal) * (h - padTop - padBottom);
+
+  let bars = '';
+  weekTotals.forEach((wk,i)=>{
+    const barH = (wk.total / maxVal) * (h - padTop - padBottom);
+    const x = barGap + i*(barW+barGap);
+    const y = h - padBottom - barH;
+    const color = wk.total >= goalMinutes ? 'var(--rope)' : 'var(--court)';
+    bars += `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,1)}" rx="3" fill="${color}"/>`;
+    bars += `<text x="${x + barW/2}" y="${h-3}" text-anchor="middle" font-size="8" fill="var(--ink-soft)" font-family="JetBrains Mono, monospace">${wk.label.split(' ')[0]}</text>`;
+  });
+
+  svg.innerHTML = `
+    <line x1="0" y1="${goalY}" x2="${w}" y2="${goalY}" stroke="var(--line)" stroke-width="1" stroke-dasharray="4,3"/>
+    ${bars}
+  `;
+}
+
 function renderHistory(){
   const container = document.getElementById('history');
-  const filtered = activeFilter === 'all' ? sessions : sessions.filter(s=>s.type===activeFilter);
+  const filtered = activeFilter === 'all' ? sessions
+    : activeFilter === 'cardio' ? sessions.filter(s=>CARDIO_TYPES.includes(s.type))
+    : sessions.filter(s=>s.type==='strength');
   if(filtered.length === 0){
     container.innerHTML = '<div class="empty">No sessions logged yet for this filter.</div>';
     return;
@@ -736,7 +814,7 @@ function renderHistory(){
       return `
       <div class="sess-row">
         <span class="sess-date">${fmtShort(parseDate(s.date))}</span>
-        <span class="type-tag ${s.type}">${typeLabel(s.type)}</span>
+        <span class="type-tag cardio">${typeLabel(s.type)}</span>
         <span class="sess-note">${s.note ? s.note.replace(/</g,'&lt;') : ''}</span>
         <span class="sess-min">${s.minutes}m</span>
         <span class="row-actions">
@@ -814,13 +892,18 @@ function startEdit(s){
   document.getElementById('fDate').value = s.date;
   document.getElementById('fNote').value = s.note || '';
 
-  const chip = document.querySelector(`.type-chip[data-type="${s.type}"]`);
+  const isStrength = s.type === 'strength';
+  const category = isStrength ? 'strength' : 'cardio';
+  const chip = document.querySelector(`.type-chip[data-type="${category}"]`);
   if(chip){
-    selectedType = s.type;
+    selectedType = category;
     document.querySelectorAll('.type-chip').forEach(c=>c.classList.toggle('active', c===chip));
-    const isStrength = s.type === 'strength';
     document.getElementById('cardioFields').style.display = isStrength ? 'none' : 'block';
+    document.getElementById('cardioTypeWrap').style.display = isStrength ? 'none' : 'block';
     document.getElementById('strengthFields').style.display = isStrength ? 'block' : 'none';
+  }
+  if(!isStrength){
+    document.getElementById('cardioTypeSelect').value = s.type;
   }
 
   if(s.type === 'strength'){
@@ -917,6 +1000,7 @@ document.getElementById('typeChips').addEventListener('click', (e)=>{
   document.querySelectorAll('.type-chip').forEach(c=>c.classList.toggle('active', c===chip));
   const isStrength = selectedType === 'strength';
   document.getElementById('cardioFields').style.display = isStrength ? 'none' : 'block';
+  document.getElementById('cardioTypeWrap').style.display = isStrength ? 'none' : 'block';
   document.getElementById('strengthFields').style.display = isStrength ? 'block' : 'none';
 });
 
@@ -957,7 +1041,8 @@ document.getElementById('logForm').addEventListener('submit', async (e)=>{
   } else {
     const minutes = parseInt(document.getElementById('fMin').value, 10);
     if(!minutes || minutes <= 0) return;
-    newSession = { id, date, minutes, note, type: selectedType };
+    const cardioType = document.getElementById('cardioTypeSelect').value;
+    newSession = { id, date, minutes, note, type: cardioType };
   }
 
   if(editingId){
@@ -1069,7 +1154,7 @@ load();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js?v=7').catch(()=>{});
+    navigator.serviceWorker.register('sw.js?v=8').catch(()=>{});
   });
 }
 </script>
